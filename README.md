@@ -41,11 +41,11 @@ Left pane = list, right pane = details + live journal. Full key map:
 |---|---|
 | `q` / `Esc`, `Ctrl-C` | quit |
 | `j`/`k` or `↑`/`↓` | move |
-| `Tab` / `1..7` | switch tabs |
+| `Tab` / `Shift-Tab` / `1..7` | next / previous / direct tab |
 | `s` `t` `r` `e` `d` `m` | start / stop / restart / enable / disable / **mask** (`M` = unmask) — always asks `y/n` |
 | `U` | toggle scope **system ⇄ user** (header shows `[system]` / `[user]`) |
 | `R` | `daemon-reload` (asks `y/n`) |
-| `P` | built-in profiles picker |
+| `P` | built-in profiles picker (`j/k` choose · `Enter` confirm · `Esc` close, then `y/n`) |
 | `/` + `Enter` | filter |
 | `f` | follow journal |
 
@@ -97,7 +97,8 @@ New ones are added by PR with tests — never config files.
 | `print-on-demand` | stops/disables `cups-browsed`+`cups.service`, enables+starts `cups.socket` |
 | `no-ssh-a11y` | stop+mask `gcr-ssh-agent.*`, `at-spi-dbus-bus` (user scope) |
 
-TUI: press `P`. CLI: `ksys profile <name> --yes` (refuses without `--yes`).
+TUI: press `P`. CLI: `ksys profiles` to list, `ksys profile <name> --yes`
+(refuses without `--yes`).
 
 ## System vs user scope
 
@@ -109,8 +110,8 @@ session bus — without the user scope they are invisible.
 ## Safety
 
 - Read-only by default. No root daemon, no blanket sudo.
-- Every destructive action (`stop/restart/disable/mask`) asks `y/n` in the TUI;
-  CLI profiles require explicit `--yes`.
+- Every action (`start/stop/restart/enable/disable/mask/unmask`) and
+  `daemon-reload` asks `y/n` in the TUI; CLI profiles require explicit `--yes`.
 - A profile never stops at the first error: it reports step by step.
 
 ## Trying it in Docker (nothing installed on your machine)
@@ -126,10 +127,10 @@ bash docker/test-systemd.sh
 
 | Symptom | Cause |
 |---|---|
-| `sin system bus` / limited views | PID 1 is not systemd (plain container, WSL1). Use `docker/test-systemd.sh`. |
-| `networkd no activo` | Desktop uses NetworkManager instead of networkd. Expected. |
-| `bootctl: Permission denied` | Reading EFI entries needs root. Journal boot logs still work. |
-| `(sin logs o sin permiso journal)` | Your user can't read that unit's journal. `journalctl -u <unit>` shows why. |
+| Few/no units, status shows `D-Bus fallo (...), fallback systemctl` | PID 1 is not systemd (plain container, WSL1). Use `docker/test-systemd.sh`. |
+| Network tab shows `networkd no activo` | Desktop uses NetworkManager instead of networkd. Expected. |
+| `bootctl` shows permission errors | Reading EFI entries needs root. Journal boot logs still work. |
+| Detail pane shows `(sin logs o sin permiso journal)` | Your user can't read that unit's journal. `journalctl -u <unit>` shows why. |
 
 ## Uninstall
 

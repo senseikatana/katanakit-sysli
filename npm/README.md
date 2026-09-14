@@ -12,7 +12,7 @@ ksys
 Requires **Linux + systemd**. Both binaries (x64, arm64) ship inside this
 single package — no downloads at install time.
 
-Quick start: `j/k` move · `s/t/r/e/d/m` act (asks `y/n`) · `U` system/user scope ·
+Quick start: `j/k` move · `s/t/r/e/d/m/M` act (asks `y/n`) · `U` system/user scope ·
 `R` daemon-reload · `P` built-in profiles · `q` quit. Full guide with CLI
 cookbook, profiles and troubleshooting:
 https://github.com/senseikatana/katanakit-sysli

@@ -2,18 +2,22 @@
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-09-14 — control total systemd + CLI + paquete npm único
+
+Paquete único npm 0.2.0 (consolidación + docs + Docker):
+
 - [x] Consolidar npm en paquete único `katanakit-sysli@0.2.0` (bins x64+arm64 dentro, shim por arch)
 - [x] README raíz en inglés orientado a uso (cookbook CLI, perfiles, scope, Docker, troubleshooting)
 - [x] `npm/README.md` corto para la página npm
 - [x] Docker `test-install` (pack+install limpio) y `test-systemd` (systemd real privilegiado)
 - [x] `bin_name = "ksys"` (el help no muestra `ksys-x64`)
+- [x] Publish por Trusted Publisher OIDC, sin `NPM_TOKEN`
+- [x] `sync-version.cjs` simplificado: solo `Cargo.toml` == `npm/package.json` (`npm-linux-*` congelados en 0.1.0)
 - [ ] Despublicar `@senseikatana/ksys-linux-*` (ventana 72h hasta ~17 sep 17:10Z, con OTP) o deprecar
 - [ ] Conectar Trusted Publisher en npmjs.com (katanakit-sysli → repo + workflow)
 - [ ] Tag `npm-v0.2.0` y verificar publish OIDC + install en Docker
 
-## [0.2.0] — control total systemd + CLI funciones
-
-Checklist de la iteración systemd-control (scope + mask + perfiles + CLI):
+Control systemd + CLI (scope + mask + perfiles):
 
 - [x] `Scope::System/User` en `systemd.rs` (system bus + session bus, `systemctl --user`)
 - [x] Acciones `mask/unmask` en TUI (`m`/`M`) y CLI, con confirm

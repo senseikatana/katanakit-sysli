@@ -44,7 +44,7 @@ for (const rel of MANIFESTS) {
 }
 
 if (checkOnly && dirty) {
-  console.error("Corre: node scripts/sync-version.mjs");
+  console.error("Corre: node scripts/sync-version.cjs");
   process.exit(1);
 }
 if (!dirty) console.log(`OK todas en ${version}`);

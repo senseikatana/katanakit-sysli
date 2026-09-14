@@ -27,8 +27,8 @@ TUI + CLI Rust para el ecosistema systemd (`ksys`). Binario único, sin sudo tot
 ## Safety rules (no negociables)
 
 - Jamás `sudo` dentro del código: polkit autentica por acción.
-- Toda acción destructiva (`stop/restart/disable/mask`) pide confirm `y/n`
-  en TUI; perfiles CLI exigen `--yes` explícito.
+- Toda acción (`start/stop/restart/enable/disable/mask/unmask`) y
+  `daemon-reload` pide confirm `y/n` en TUI; perfiles CLI exigen `--yes` explícito.
 - `profiles::apply` no corta al primer error: reporta paso por paso.
 - Nunca auto-aplicar perfiles en tests ni en CI: solo invariantes
   (nombres únicos, scopes, orden de pasos) + comandos de lectura.
