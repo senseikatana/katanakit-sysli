@@ -14,7 +14,10 @@ Checklist de la iteración systemd-control (scope + mask + perfiles + CLI):
 - [x] `sys-menu.sh` con scope, mask, daemon-reload, running y perfiles vía CLI
 - [x] Tests invariantes de perfiles (4/4) + pruebas reales de lectura en BigLinux
 - [x] `AGENTS.md` creado; README con CLI, perfiles y scope
-- [ ] Publicar `npm-v0.1.0` (requiere secret `NPM_TOKEN` + tag)
+- [x] Secret `NPM_TOKEN` creado (token con 2FA: no sirve en CI → EOTP)
+- [ ] Primer publish `0.1.0` local con OTP manual (3 comandos, orden: x64 → arm64 → wrapper)
+- [ ] Conectar Trusted Publisher en npmjs.com (los 3 paquetes → repo + workflow `npm-platform.yml`)
+- [ ] Borrar secret `NPM_TOKEN` y taggear `npm-v0.2.0` para verificar publish 100% OIDC
 
 ## [0.1.0] — base
 

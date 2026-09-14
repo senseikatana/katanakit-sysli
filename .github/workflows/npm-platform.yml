@@ -65,13 +65,16 @@ jobs:
           path: ${{ matrix.pkgdir }}/bin/ksys
 
   # 2. Publica: plataformas primero, wrapper después. Solo con tag npm-v*.
+  # Modo Trusted Publisher (OIDC): SIN token. Requiere conectar el repo en
+  # npmjs.com > cada paquete > Settings > Trusted Publishers (una sola vez).
+  # El primer publish (paquetes inexistentes) se hace local con OTP manual.
   publish:
     needs: build
     if: startsWith(github.ref, 'refs/tags/npm-v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # provenance de npm
+      id-token: write # OIDC para Trusted Publishers (sin NPM_TOKEN)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -87,11 +90,5 @@ jobs:
           cp _artifacts/npm-linux-arm64/ksys npm-linux-arm64/bin/ksys
           chmod +x npm-linux-x64/bin/ksys npm-linux-arm64/bin/ksys
       - run: npm publish --provenance --access public ./npm-linux-x64
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - run: npm publish --provenance --access public ./npm-linux-arm64
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - run: npm publish --provenance --access public ./npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
