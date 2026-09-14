@@ -1,12 +1,15 @@
+use crate::systemd::Scope;
 use anyhow::Result;
 use tokio::process::Command;
 
-pub async fn tail_unit(unit: &str, n: usize) -> Result<Vec<String>> {
-    run_cmd(
-        "journalctl",
-        &["-u", unit, "-n", &n.to_string(), "--no-pager"],
-    )
-    .await
+pub async fn tail_unit(scope: Scope, unit: &str, n: usize) -> Result<Vec<String>> {
+    // Units de usuario viven en el journal de usuario: journalctl --user -u ...
+    let n_str = n.to_string();
+    let mut args: Vec<&str> = vec!["-u", unit, "-n", &n_str, "--no-pager"];
+    if scope == Scope::User {
+        args.push("--user");
+    }
+    run_cmd("journalctl", &args).await
 }
 
 pub async fn run_cmd(bin: &str, args: &[&str]) -> Result<Vec<String>> {

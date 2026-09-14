@@ -1,39 +1,87 @@
 #!/usr/bin/env bash
-# Fase 1 — validacion UX con gum (se tira, no se porta a Rust).
-# Requiere: gum, systemctl, journalctl. Funciona en BigLinux/Arch/Deb/Fedora.
+# Menu gum de ksys: usa el CLI `ksys` como unica fuente de verdad.
+# Si no hay binario compilado, cae a systemctl directo (mismas acciones).
+# Requiere: gum, systemctl, journalctl. BigLinux/Arch/Deb/Fedora.
 set -euo pipefail
 
+# Binario ksys: instalado, release local o debug local (en ese orden).
+KSYS=""
+for c in ksys "$(dirname "$0")/../../target/release/ksys" "$(dirname "$0")/../../target/debug/ksys"; do
+  if [ -x "$c" ]; then KSYS="$c"; break; fi
+done
+
+SCOPE="" # "" = system, "--user" = user
+scope_flag() { [ -n "$SCOPE" ] && echo "--user" || echo ""; }
+
 pick_area() {
-  gum choose --header "ksys Fase1 — ecosistema systemd" \
-    "services" "timers" "logs" "boot" "network" "sessions" "salir"
+  local label="ksys — ecosistema systemd [$([ -n "$SCOPE" ] && echo user || echo system)]"
+  gum choose --header "$label" \
+    "services" "running" "timers" "perfiles" "daemon-reload" "scope" \
+    "logs" "boot" "network" "sessions" "salir"
 }
 
 pick_service() {
-  systemctl list-units --type=service --all --no-legend --no-pager \
+  # shellcheck disable=SC2086
+  systemctl list-units --type=service --all --no-legend --no-pager $SCOPE \
     | awk '{print $1}' | gum filter --placeholder "fuzzy: nginx..."
 }
 
-tail_logs() {
-  local unit="$1"
-  echo "== journalctl -f -u $unit (Ctrl+C para volver) =="
-  journalctl -f -u "$unit" --no-pager -n 50 || true
+run_action() {
+  # $1=accion $2=unit — via ksys CLI si existe, si no systemctl directo.
+  local act="$1" unit="$2" flag
+  flag=$(scope_flag)
+  gum confirm "¿$act $unit $([ -n "$flag" ] && echo '[user]')? (polkit pedira auth)" || return 0
+  if [ -n "$KSYS" ]; then
+    # shellcheck disable=SC2086
+    "$KSYS" "$act" $flag "$unit"
+  else
+    # shellcheck disable=SC2086
+    systemctl "$act" $flag "$unit"
+  fi
 }
 
 service_action() {
-  local unit="$1"
-  local act
-  act=$(gum choose --header "$unit" "status" "restart" "stop" "start" "enable" "disable" "logs" "volver")
+  local unit="$1" act
+  act=$(gum choose --header "$unit" \
+    "status" "start" "stop" "restart" "enable" "disable" "mask" "unmask" "logs" "volver")
   case "$act" in
-    status) systemctl status "$unit" --no-pager || true ;;
-    restart|stop|start)
-      gum confirm "¿$act $unit? (polkit pedira auth solo por esta accion)" || return 0
-      systemctl "$act" "$unit" ;;
-    enable|disable)
-      gum confirm "¿$act $unit?" || return 0
-      systemctl "$act" "$unit" ;;
-    logs) tail_logs "$unit" ;;
+    status)
+      if [ -n "$KSYS" ]; then "$KSYS" status $(scope_flag) "$unit"; else systemctl status $(scope_flag) "$unit" --no-pager || true; fi ;;
+    logs)
+      echo "== journalctl -f -u $unit (Ctrl+C para volver) =="
+      journalctl -f $(scope_flag) -u "$unit" --no-pager -n 50 || true ;;
+    volver) return 0 ;;
+    *) run_action "$act" "$unit" ;;
   esac
   gum confirm "¿volver al menu?" || exit 0
+}
+
+run_profile() {
+  local name="$1" desc="$2"
+  gum confirm "¿Aplicar perfil '$name'? $desc" || return 0
+  if [ -n "$KSYS" ]; then
+    "$KSYS" profile "$name" --yes
+  else
+    echo "sin binario ksys: compila con cargo build --release"
+    return 0
+  fi
+  gum confirm "¿volver al menu?" || exit 0
+}
+
+pick_profile() {
+  local p
+  if [ -n "$KSYS" ]; then
+    p=$("$KSYS" profiles | grep -v '^ ' | awk '{print $1}' | gum choose --header "perfil built-in") || return 0
+  else
+    p=$(gum choose --header "perfil built-in" \
+      "no-power" "no-modem" "print-on-demand" "no-ssh-a11y") || return 0
+  fi
+  case "$p" in
+    no-power) run_profile "$p" "stop+disable+mask upower y power-profiles-daemon" ;;
+    no-modem) run_profile "$p" "stop+disable+mask ModemManager, switcheroo-control y bolt" ;;
+    print-on-demand) run_profile "$p" "apaga cups, deja cups.socket a demanda" ;;
+    no-ssh-a11y) run_profile "$p" "stop+mask gcr-ssh-agent y at-spi (user)" ;;
+  esac
 }
 
 main() {
@@ -42,7 +90,18 @@ main() {
     case "$area" in
       services)
         unit=$(pick_service); [ -n "$unit" ] && service_action "$unit" ;;
-      timers) systemctl list-timers --no-pager || true; read -rp "Enter..." _ ;;
+      running)
+        # shellcheck disable=SC2086
+        if [ -n "$KSYS" ]; then "$KSYS" list $(scope_flag) --state running --type service | less;
+        else systemctl list-units --type=service --state=running --no-pager $SCOPE | less; fi ;;
+      timers) systemctl list-timers --no-pager $SCOPE || true; read -rp "Enter..." _ ;;
+      perfiles) pick_profile ;;
+      daemon-reload)
+        gum confirm "¿daemon-reload $([ -n "$SCOPE" ] && echo '[user]')?" || continue
+        if [ -n "$KSYS" ]; then "$KSYS" daemon-reload $(scope_flag); else systemctl daemon-reload $SCOPE; fi
+        read -rp "Enter..." _ ;;
+      scope)
+        if [ -z "$SCOPE" ]; then SCOPE="--user"; else SCOPE=""; fi ;;
       logs) journalctl --no-pager -n 100 -p info || true; read -rp "Enter..." _ ;;
       boot) journalctl -b --no-pager -n 80 || true; bootctl status || true; read -rp "Enter..." _ ;;
       network) networkctl status || true; read -rp "Enter..." _ ;;

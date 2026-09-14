@@ -1,4 +1,8 @@
-use crate::{journal, systemd};
+use crate::{
+    journal,
+    profiles::{self, StepResult},
+    systemd::{self, Scope},
+};
 use std::time::Instant;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,11 +44,13 @@ impl Tab {
 #[derive(Debug, Clone)]
 pub struct PendingAction {
     pub action: String,
+    pub scope: Scope,
     pub unit: String,
 }
 
 pub struct App {
     pub active_tab: Tab,
+    pub scope: Scope,
     pub units: Vec<systemd::UnitInfo>,
     pub filtered: Vec<usize>,
     pub selected: usize,
@@ -55,6 +61,12 @@ pub struct App {
     pub journal_lines: Vec<String>,
     pub confirm: Option<PendingAction>,
     pub follow: bool,
+    /// Picker de perfiles abierto: indice seleccionado dentro de profiles::all().
+    pub profile_picker: Option<usize>,
+    /// Perfil confirmado esperando y/n.
+    pub pending_profile: Option<String>,
+    /// Ultimo reporte de perfil aplicado (para mostrar en el panel).
+    pub last_report: Vec<StepResult>,
     last_poll: Instant,
 }
 
@@ -62,17 +74,21 @@ impl App {
     pub fn new() -> Self {
         Self {
             active_tab: Tab::Units,
+            scope: Scope::System,
             units: vec![],
             filtered: vec![],
             selected: 0,
             filter: String::new(),
             filtering: false,
-            status: "q salir · j/k mover · tab tabs · s/t/r/e/d accion · / filtrar · f follow"
+            status: "q salir · j/k mover · tab tabs · s/t/r/e/d/m accion · U scope · R reload · P perfiles · / filtrar · f follow"
                 .to_string(),
             detail: String::new(),
             journal_lines: vec!["selecciona una unit...".to_string()],
             confirm: None,
             follow: false,
+            profile_picker: None,
+            pending_profile: None,
+            last_report: vec![],
             last_poll: Instant::now(),
         }
     }
@@ -102,18 +118,36 @@ impl App {
             _ => "service",
         };
         // Intento D-Bus primero, fallback a systemctl si no hay bus (containers, etc.)
-        match systemd::list_units(kind).await {
+        match systemd::list_units(self.scope, kind, None).await {
             Ok(units) => {
-                self.status = format!("{} units via D-Bus ({} totales)", units.len(), kind);
+                self.status = format!(
+                    "{} units via D-Bus ({} · {})",
+                    units.len(),
+                    kind,
+                    self.scope.label()
+                );
                 self.units = units;
             }
             Err(e) => {
                 self.status = format!("D-Bus fallo ({e}), fallback systemctl");
-                self.units = systemd::list_units_fallback(kind).await.unwrap_or_default();
+                self.units = systemd::list_units_fallback(self.scope, kind, None)
+                    .await
+                    .unwrap_or_default();
             }
         }
         self.rebuild_filter();
         self.load_detail().await;
+    }
+
+    /// U: alterna system <-> user. Las units de usuario (gcr-ssh-agent, at-spi)
+    /// solo existen en el session bus.
+    pub async fn toggle_scope(&mut self) {
+        self.scope = match self.scope {
+            Scope::System => Scope::User,
+            Scope::User => Scope::System,
+        };
+        self.selected = 0;
+        self.refresh_units().await;
     }
 
     fn rebuild_filter(&mut self) {
@@ -155,8 +189,12 @@ impl App {
     /// Llamado despues de mover seleccion o cambiar tab: recarga journal + detail.
     pub async fn load_detail(&mut self) {
         if let Some(u) = self.selected_unit().cloned() {
-            self.detail = systemd::show_unit(&u.name).await.unwrap_or_default();
-            self.journal_lines = journal::tail_unit(&u.name, 80).await.unwrap_or_default();
+            self.detail = systemd::show_unit(self.scope, &u.name)
+                .await
+                .unwrap_or_default();
+            self.journal_lines = journal::tail_unit(self.scope, &u.name, 80)
+                .await
+                .unwrap_or_default();
             if self.journal_lines.is_empty() {
                 self.journal_lines = vec!["(sin logs o sin permiso journal)".to_string()];
             }
@@ -257,28 +295,50 @@ impl App {
             self.status = "accion solo en Units/Timers".to_string();
             return;
         }
-        if matches!(action, "stop" | "restart" | "disable") {
-            self.confirm = Some(PendingAction {
-                action: action.to_string(),
-                unit: u.name.clone(),
-            });
-            self.status = format!("confirmar {} {} ?  (y/n)", action, u.name);
-        } else {
-            self.confirm = Some(PendingAction {
-                action: action.to_string(),
-                unit: u.name.clone(),
-            });
-            // start/enable tambien piden confirm para enseñar polkit
-            self.status = format!("confirmar {} {} ?  (y/n)", action, u.name);
-        }
+        // Toda accion pide confirm (polkit puede pedir auth solo por esa accion).
+        self.confirm = Some(PendingAction {
+            action: action.to_string(),
+            scope: self.scope,
+            unit: u.name.clone(),
+        });
+        self.status = format!(
+            "confirmar {} {} [{}] ?  (y/n)",
+            action,
+            u.name,
+            self.scope.label()
+        );
+    }
+
+    /// R: daemon-reload con confirm (recarga ficheros de units).
+    pub fn request_reload(&mut self) {
+        self.confirm = Some(PendingAction {
+            action: "daemon-reload".to_string(),
+            scope: self.scope,
+            unit: String::new(),
+        });
+        self.status = format!("confirmar daemon-reload [{}] ?  (y/n)", self.scope.label());
     }
 
     pub async fn execute_pending(&mut self, p: PendingAction) {
+        if p.action == "daemon-reload" {
+            self.status = format!(
+                "daemon-reload [{}]... (polkit puede pedir auth)",
+                p.scope.label()
+            );
+            match systemd::daemon_reload(p.scope).await {
+                Ok(out) => self.status = format!("ok: {out}"),
+                Err(e) => self.status = format!("error: {e:#}"),
+            }
+            self.refresh_units().await;
+            return;
+        }
         self.status = format!(
-            "ejecutando {} {}... (polkit puede pedir auth)",
-            p.action, p.unit
+            "ejecutando {} {} [{}]... (polkit puede pedir auth)",
+            p.action,
+            p.unit,
+            p.scope.label()
         );
-        match systemd::run_action(&p.action, &p.unit).await {
+        match systemd::run_action(&p.action, p.scope, &p.unit).await {
             Ok(out) => {
                 self.status = format!(
                     "ok {} {}: {}",
@@ -295,6 +355,64 @@ impl App {
             Err(e) => {
                 self.status = format!("error: {e:#}");
             }
+        }
+        self.refresh_units().await;
+    }
+
+    // --- Perfiles built-in (P abre picker, Enter confirma, y ejecuta) ---
+
+    pub fn open_profiles(&mut self) {
+        self.profile_picker = Some(0);
+        self.status = "perfil: j/k elegir · Enter confirmar · Esc cerrar".to_string();
+    }
+
+    pub fn close_profiles(&mut self) {
+        self.profile_picker = None;
+    }
+
+    pub fn profile_next(&mut self) {
+        if let Some(i) = self.profile_picker {
+            self.profile_picker = Some((i + 1) % profiles::all().len());
+        }
+    }
+
+    pub fn profile_prev(&mut self) {
+        if let Some(i) = self.profile_picker {
+            let n = profiles::all().len();
+            self.profile_picker = Some((i + n - 1) % n);
+        }
+    }
+
+    pub fn confirm_profile(&mut self) {
+        if let Some(i) = self.profile_picker.take() {
+            if let Some(p) = profiles::all().get(i) {
+                self.pending_profile = Some(p.name.to_string());
+                self.status = format!(
+                    "aplicar perfil '{}' ({} pasos) ?  (y/n)",
+                    p.name,
+                    p.steps.len()
+                );
+            }
+        }
+    }
+
+    pub async fn execute_profile(&mut self, name: &str) {
+        let Some(profile) = profiles::find(name) else {
+            self.status = format!("perfil desconocido: {name}");
+            return;
+        };
+        self.status = format!("aplicando perfil '{}'...", name);
+        match profiles::apply(&profile).await {
+            Ok(report) => {
+                let ok = report.iter().filter(|r| r.ok).count();
+                self.status = format!(
+                    "perfil '{}': {ok}/{} pasos ok (ver panel)",
+                    name,
+                    report.len()
+                );
+                self.last_report = report;
+            }
+            Err(e) => self.status = format!("error perfil: {e:#}"),
         }
         self.refresh_units().await;
     }

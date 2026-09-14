@@ -1,0 +1,36 @@
+{
+  "name": "katanakit-sysli",
+  "version": "0.1.0",
+  "description": "ksys — lazysystemd: todo el ecosistema systemd (units, timers, journal, boot, network, sessions, devices) en una TUI. Requiere Linux + systemd.",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "ksys": "./bin/ksys.js"
+  },
+  "os": [
+    "linux"
+  ],
+  "optionalDependencies": {
+    "@senseikatana/ksys-linux-x64": "0.1.0",
+    "@senseikatana/ksys-linux-arm64": "0.1.0"
+  },
+  "scripts": {
+    "check": "node --check ./bin/ksys.js && echo OK"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/senseikatana/katanakit-sysli.git",
+    "directory": "npm"
+  },
+  "keywords": [
+    "systemd",
+    "tui",
+    "sysadmin",
+    "journalctl",
+    "cli"
+  ],
+  "author": "senseikatana - Sergio Jurado",
+  "engines": {
+    "node": ">=18"
+  }
+}
