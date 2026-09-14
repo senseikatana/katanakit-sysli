@@ -82,6 +82,7 @@ jobs:
         with:
           path: _artifacts
       - run: |
+          mkdir -p npm-linux-x64/bin npm-linux-arm64/bin
           cp _artifacts/npm-linux-x64/ksys npm-linux-x64/bin/ksys
           cp _artifacts/npm-linux-arm64/ksys npm-linux-arm64/bin/ksys
           chmod +x npm-linux-x64/bin/ksys npm-linux-arm64/bin/ksys
