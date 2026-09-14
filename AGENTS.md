@@ -8,7 +8,8 @@ TUI + CLI Rust para el ecosistema systemd (`ksys`). Binario único, sin sudo tot
 - `cargo fmt --check` — formato (gate; `cargo fmt` para arreglar).
 - `cargo test` — tests (hoy: invariantes de `profiles`).
 - `cargo build --release` — binario `target/release/ksys`.
-- `node scripts/sync-version.cjs --check` — `Cargo.toml` == 3 `package.json` npm.
+- `node scripts/sync-version.cjs --check` — `Cargo.toml` == `npm/package.json`.
+  (Los dirs `npm-linux-*` están congelados en 0.1.0, deprecados desde 0.2.0.)
 - `bash -n scripts/dev/sys-menu.sh` — sintaxis del menú gum.
 
 ## Architecture
@@ -36,5 +37,6 @@ TUI + CLI Rust para el ecosistema systemd (`ksys`). Binario único, sin sudo tot
 
 - Rama `dev` (conventional commits). Nunca `feature` → `main` directo.
 - CHANGELOG `[Unreleased]` para cambios visibles; README al día con features.
-- Release npm por tag `npm-v*` (workflow `npm-platform.yml`): plataformas
-  primero, wrapper después. Requiere secret `NPM_TOKEN`.
+- Release npm por tag `npm-v*` (workflow `npm-platform.yml`): compila x64+arm64
+  y publica el paquete único `katanakit-sysli` vía Trusted Publisher OIDC
+  (sin tokens). `npm/bin/ksys-*` los pone el CI, jamás se commitean.

@@ -19,6 +19,7 @@ use systemd::Scope;
 #[derive(Parser, Debug)]
 #[command(
     name = "ksys",
+    bin_name = "ksys",
     version,
     about = "lazysystemd: ecosistema systemd en TUI (sin sudo total)"
 )]

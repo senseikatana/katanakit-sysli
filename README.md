@@ -1,111 +1,176 @@
-# katanakit-sysli — ksys
+# ksys — lazygit for the whole systemd ecosystem
 
-lazysystemd para el **ecosistema systemd**: units + timers + journal + boot + networkd/logind/udevd.
-Sin sudo total: polkit pide auth solo por la acción que confirmás.
+`ksys` (from **katanakit-sysli**) manages **all of systemd**, not just services:
+units, timers, journal, boot, network, sessions and devices — in one terminal UI.
+No full sudo: polkit authenticates **per action**, only when you confirm one.
 
-Funciona en cualquier distro con systemd (probado en BigLinux/Manjaro systemd 261;
-mismo D-Bus en Arch, Deb, Fedora). Si un subsistema no está activo
-(ej. networkd en desktop con NetworkManager), lo muestra en vez de romper.
+Works on any distro running systemd (tested on BigLinux/Manjaro systemd 261;
+same D-Bus API on Arch, Debian, Fedora). If a subsystem is inactive
+(e.g. networkd on a NetworkManager desktop), it says so instead of breaking.
 
-## Requisitos
-
-- Linux con systemd (PID 1 = systemd)
-- Rust estable + `systemctl`, `journalctl`
-- Opcional Fase 1: `gum`
-
-## Instalación
+## Install
 
 ```bash
-npm i -g katanakit-sysli   # binario precompilado (Linux x64/arm64) + comando `ksys`
+npm i -g katanakit-sysli
 ksys
 ```
 
-> npm es solo el instalador (patrón esbuild): el core sigue siendo Rust.
-> En macOS/Windows el comando avisa que requiere Linux + systemd en vez de romper.
+Requirements: **Linux + systemd**. Both binaries (x64, arm64) ship inside this
+single package — no downloads at install time. On macOS/Windows the command
+explains it needs Linux instead of crashing.
 
-## Uso desde fuente
+> npm is only the installer (esbuild pattern): the core is 100% Rust.
+
+## 5-minute TUI tour
+
+Seven tabs, one for each part of the systemd ecosystem:
+
+| Key | Tab |
+|---|---|
+| `1` | Units (services, sockets…) |
+| `2` | Timers |
+| `3` | Journal |
+| `4` | Boot (`journalctl -b` + `bootctl`) |
+| `5` | Network (`networkctl` / networkd) |
+| `6` | Sessions (`loginctl`) |
+| `7` | Devices (udev) |
+
+Left pane = list, right pane = details + live journal. Full key map:
+
+| Keys | Action |
+|---|---|
+| `q` / `Esc`, `Ctrl-C` | quit |
+| `j`/`k` or `↑`/`↓` | move |
+| `Tab` / `1..7` | switch tabs |
+| `s` `t` `r` `e` `d` `m` | start / stop / restart / enable / disable / **mask** (`M` = unmask) — always asks `y/n` |
+| `U` | toggle scope **system ⇄ user** (header shows `[system]` / `[user]`) |
+| `R` | `daemon-reload` (asks `y/n`) |
+| `P` | built-in profiles picker |
+| `/` + `Enter` | filter |
+| `f` | follow journal |
+
+## CLI cookbook
+
+Everything the TUI does is also a subcommand — scriptable, same logic,
+used by the bundled gum menu (`scripts/dev/sys-menu.sh`):
 
 ```bash
-cargo run -- --kind service   # o timer
-cargo build --release        # binario en target/release/ksys
-./target/release/ksys
+# List running services (system and user scopes)
+ksys list --state running --type service
+ksys list --user --state running
+
+# Status without parsing text
+ksys status upower
+ksys status gcr-ssh-agent.service --user
+
+# Power stack off
+ksys stop upower && ksys disable upower && ksys mask upower
+ksys stop power-profiles-daemon && ksys disable power-profiles-daemon && ksys mask power-profiles-daemon
+
+# Modems, hybrid graphics, thunderbolt off
+for u in ModemManager switcheroo-control bolt; do ksys stop $u && ksys disable $u && ksys mask $u; done
+# ...or one confirmation for all: ksys profile no-modem --yes
+
+# Print on demand (services off, socket activates when printing)
+ksys stop cups-browsed && ksys disable cups-browsed
+ksys stop cups.service && ksys disable cups.service
+ksys enable cups.socket && ksys start cups.socket
+
+# SSH agent + accessibility (user scope only)
+ksys stop --user gcr-ssh-agent.service && ksys mask --user gcr-ssh-agent.service
+ksys stop --user gcr-ssh-agent.socket && ksys mask --user gcr-ssh-agent.socket
+ksys stop --user at-spi-dbus-bus && ksys mask --user at-spi-dbus-bus
+
+# Reload systemd
+ksys daemon-reload
 ```
 
-Fase 1 (validar UX sin TUI):
+## Built-in profiles
 
-```bash
-./scripts/dev/sys-menu.sh
-```
+Versioned recipes (one confirmation per profile, per-step report, polkit per action).
+New ones are added by PR with tests — never config files.
 
-## Teclas
-
-`q` salir · `j/k` mover · `Tab` tabs · `1..7` tab directa ·
-`s/t/r/e/d/m` start/stop/restart/enable/disable/mask (+`M` unmask, con confirm `y/n`) ·
-`U` alternar scope system/user · `R` daemon-reload · `P` perfiles built-in ·
-`/` filtrar · `f` follow journal · `Ctrl-C` salir
-
-## Scope system/user
-
-`U` alterna el manager: system (PID 1) o user (sesión). Las units de usuario
-(`gcr-ssh-agent`, `at-spi`) solo existen en el session bus — sin esto son invisibles.
-`ksys --scope user` arranca directo en user. El header muestra `[system]` o `[user]`.
-
-## Perfiles built-in
-
-Recetas versionadas (una confirmación por perfil, reporte por paso, polkit por acción):
-
-| Perfil | Qué hace |
+| Profile | What it does |
 |---|---|
 | `no-power` | stop+disable+mask `upower`, `power-profiles-daemon` |
 | `no-modem` | stop+disable+mask `ModemManager`, `switcheroo-control`, `bolt` |
-| `print-on-demand` | stop+disable `cups-browsed`+`cups.service`, enable+start `cups.socket` |
-| `no-ssh-a11y` | stop+mask `gcr-ssh-agent.*`, `at-spi-dbus-bus` (scope user) |
+| `print-on-demand` | stops/disables `cups-browsed`+`cups.service`, enables+starts `cups.socket` |
+| `no-ssh-a11y` | stop+mask `gcr-ssh-agent.*`, `at-spi-dbus-bus` (user scope) |
 
-En TUI: `P` abre el picker. En CLI: `ksys profile <nombre> --yes` (sin `--yes` se niega).
+TUI: press `P`. CLI: `ksys profile <name> --yes` (refuses without `--yes`).
 
-## CLI = funciones scripteables
+## System vs user scope
 
-Todo lo del TUI existe como subcomando (lo usa el menú gum como única fuente de verdad):
+`U` switches the manager: **system** (PID 1) or **user** (your session).
+User units (`gcr-ssh-agent`, `at-spi`, your desktop apps) exist **only** on the
+session bus — without the user scope they are invisible.
+`ksys --scope user` starts directly there. CLI: add `--user` to any command.
+
+## Safety
+
+- Read-only by default. No root daemon, no blanket sudo.
+- Every destructive action (`stop/restart/disable/mask`) asks `y/n` in the TUI;
+  CLI profiles require explicit `--yes`.
+- A profile never stops at the first error: it reports step by step.
+
+## Trying it in Docker (nothing installed on your machine)
 
 ```bash
-ksys list --state running --type service   # LISTAR SERVICIOS ACTIVOS
-ksys list --user --state running           # los de tu sesión
-ksys status upower                         # active/enabled sin parsear texto
-ksys stop --user gcr-ssh-agent.socket
-ksys mask bolt
-ksys daemon-reload                         # REINICIAR SYSTEMD
-ksys profiles                              # ver recetas
-ksys profile print-on-demand --yes
+# Level 1 — install path only (no systemd inside): verifies packaging + launcher
+bash docker/test-install.sh
+# Level 2 — real systemd: full CLI/TUI test in a privileged container
+bash docker/test-systemd.sh
 ```
 
-## Seguridad
+## Troubleshooting
 
-- Solo lectura por defecto. Sin daemon root, sin sudo total.
-- Acciones destructivas (`stop/restart/disable`) piden confirmación.
-- `systemctl` + polkit autentican por acción.
+| Symptom | Cause |
+|---|---|
+| `sin system bus` / limited views | PID 1 is not systemd (plain container, WSL1). Use `docker/test-systemd.sh`. |
+| `networkd no activo` | Desktop uses NetworkManager instead of networkd. Expected. |
+| `bootctl: Permission denied` | Reading EFI entries needs root. Journal boot logs still work. |
+| `(sin logs o sin permiso journal)` | Your user can't read that unit's journal. `journalctl -u <unit>` shows why. |
+
+## Uninstall
+
+```bash
+npm rm -g katanakit-sysli
+```
+
+Masked/disabled units stay as you left them — `ksys` never reverts your system.
+To undo e.g.: `ksys unmask bolt && ksys enable bolt && ksys start bolt`.
+
+## From source (developers)
+
+```bash
+cargo run -- --kind service   # or timer; --scope user
+cargo build --release        # binary at target/release/ksys
+./scripts/dev/sys-menu.sh    # gum menu (uses the ksys CLI, falls back to systemctl)
+```
+
+Gates: `cargo clippy --all-targets` (zero warnings) → `cargo fmt --check` →
+`cargo test` → `node scripts/sync-version.cjs --check` (`Cargo.toml` == npm version).
 
 ## Layout
 
 ```
-src/main.rs      entry + loop eventos + CLI (subcomandos = funciones)
-src/app.rs       estado, tabs, scope, filtro, confirm, follow, picker perfiles
-src/systemd.rs   Scope System/User · D-Bus ListUnits + fallback · run_action (mask/unmask) · daemon_reload · is_active/is_enabled
-src/profiles.rs  4 perfiles built-in + apply con reporte por paso (+ tests)
-src/journal.rs   journalctl tail scope-aware (user usa journal --user)
-src/ui.rs        split lista/detail/journal + tabs + popup perfiles
-scripts/dev/     sys-menu.sh gum (usa ksys CLI, cae a systemctl)
-scripts/sync-version.cjs  mantiene Cargo.toml == versiones npm
-npm/             wrapper `katanakit-sysli` (bin `ksys`, sin código)
-npm-linux-x64/   binario Linux x64 (lo pone el CI)
-npm-linux-arm64/ binario Linux arm64 (lo pone el CI)
-.github/workflows/npm-platform.yml  build matrix + publish con provenance
+src/main.rs       entry + event loop + CLI (subcommands = functions)
+src/app.rs        TUI state: tabs, scope, filter, confirm, follow, profile picker
+src/systemd.rs    Scope System/User · D-Bus ListUnits + fallback · mask/unmask · daemon_reload
+src/profiles.rs   4 built-in profiles + per-step apply report (+ tests)
+src/journal.rs    scope-aware journalctl tail
+src/ui.rs         split list/detail/journal + tabs + profile popup
+scripts/dev/      gum menu (calls the ksys CLI)
+scripts/sync-version.cjs  keeps Cargo.toml == npm version
+npm/              single npm package (bundled x64+arm64 binaries, CI-built)
+docker/           install-path and real-systemd tests
 ```
 
-## Publicar una versión
+## Releasing (maintainer)
 
 ```bash
-# 1. Sube versión en Cargo.toml, sincroniza npm:
-node scripts/sync-version.cjs   # (o edita Cargo y corre el script)
-# 2. Tag y push — el CI compila, empaqueta y publica los 3 paquetes:
+# 1. Bump Cargo.toml, sync npm:
+node scripts/sync-version.cjs
+# 2. Tag — CI builds both arches and publishes the single package via OIDC:
 git tag npm-v0.2.0 && git push origin npm-v0.2.0
 ```

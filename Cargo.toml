@@ -1,6 +1,6 @@
 [package]
 name = "katanakit-sysli"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "lazysystemd para el ecosistema systemd: units + timers + journal + boot + networkd/logind/udevd. Sin sudo total, polkit por accion."
 license = "MIT"

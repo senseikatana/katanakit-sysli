@@ -1,14 +1,16 @@
-# Publica ksys en npm con binarios por plataforma.
+# Publishes ksys to npm as ONE package (`katanakit-sysli`) with both
+# prebuilt binaries bundled (x64 + arm64, ~12 MB total).
 #
-# Cuando se ejecuta:
-#   - Push de un tag `npm-v*` (ej. npm-v0.1.0) -> build + publish real.
-#   - Manual (workflow_dispatch) o PR -> solo build + empaquetado (dry-run).
+# When it runs:
+#   - Push of an `npm-v*` tag (e.g. npm-v0.2.0) -> build + real publish.
+#   - Manual (workflow_dispatch) or PR -> build only (dry-run).
 #
-# Orden de publicación (importa):
-#   1. Plataformas primero (@senseikatana/ksys-linux-x64, -arm64).
-#   2. El wrapper `katanakit-sysli` después (depende de las anteriores).
+# Trusted Publisher (OIDC) mode: NO token. Requires connecting the repo once at
+# npmjs.com > katanakit-sysli > Settings > Trusted Publishers
+# (org `senseikatana`, repo `katanakit-sysli`, workflow `npm-platform.yml`).
 #
-# Requiere el secret NPM_TOKEN con acceso a tu cuenta y a la org @senseikatana.
+# NOTE (0.1.0 history): platform packages @senseikatana/ksys-linux-* existed
+# and were unpublished/deprecated in favor of this single package.
 
 name: npm-platform
 
@@ -22,12 +24,11 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "npm/**"
-      - "npm-linux-*/**"
       - "scripts/sync-version.cjs"
   workflow_dispatch:
 
 jobs:
-  # 0. Las 3 versiones npm tienen que coincidir con Cargo.toml.
+  # 0. npm/package.json must match Cargo.toml.
   versions:
     runs-on: ubuntu-latest
     steps:
@@ -37,7 +38,7 @@ jobs:
           node-version: 20
       - run: node scripts/sync-version.cjs --check
 
-  # 1. Compila el binario en cada plataforma y lo deja en npm-linux-*/bin/.
+  # 1. Build one binary per arch.
   build:
     needs: versions
     strategy:
@@ -45,10 +46,10 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             runner: ubuntu-24.04
-            pkgdir: npm-linux-x64
+            binname: ksys-x64
           - target: aarch64-unknown-linux-gnu
             runner: ubuntu-24.04-arm
-            pkgdir: npm-linux-arm64
+            binname: ksys-arm64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -56,25 +57,21 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - run: cargo build --release --target ${{ matrix.target }}
-      - run: mkdir -p ${{ matrix.pkgdir }}/bin
-      - run: cp target/${{ matrix.target }}/release/ksys ${{ matrix.pkgdir }}/bin/ksys
-      - run: chmod +x ${{ matrix.pkgdir }}/bin/ksys
+      - run: cp target/${{ matrix.target }}/release/ksys ${{ matrix.binname }}
+      - run: chmod +x ${{ matrix.binname }}
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.pkgdir }}
-          path: ${{ matrix.pkgdir }}/bin/ksys
+          name: ${{ matrix.binname }}
+          path: ${{ matrix.binname }}
 
-  # 2. Publica: plataformas primero, wrapper después. Solo con tag npm-v*.
-  # Modo Trusted Publisher (OIDC): SIN token. Requiere conectar el repo en
-  # npmjs.com > cada paquete > Settings > Trusted Publishers (una sola vez).
-  # El primer publish (paquetes inexistentes) se hace local con OTP manual.
+  # 2. Publish ONLY katanakit-sysli with both binaries bundled. Tag-gated.
   publish:
     needs: build
     if: startsWith(github.ref, 'refs/tags/npm-v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # OIDC para Trusted Publishers (sin NPM_TOKEN)
+      id-token: write # OIDC for Trusted Publishers (no NPM_TOKEN)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -85,10 +82,9 @@ jobs:
         with:
           path: _artifacts
       - run: |
-          mkdir -p npm-linux-x64/bin npm-linux-arm64/bin
-          cp _artifacts/npm-linux-x64/ksys npm-linux-x64/bin/ksys
-          cp _artifacts/npm-linux-arm64/ksys npm-linux-arm64/bin/ksys
-          chmod +x npm-linux-x64/bin/ksys npm-linux-arm64/bin/ksys
-      - run: npm publish --provenance --access public ./npm-linux-x64
-      - run: npm publish --provenance --access public ./npm-linux-arm64
+          mkdir -p npm/bin
+          cp _artifacts/ksys-x64/ksys-x64 npm/bin/ksys-x64
+          cp _artifacts/ksys-arm64/ksys-arm64 npm/bin/ksys-arm64
+          chmod +x npm/bin/ksys-x64 npm/bin/ksys-arm64
+          ls -lh npm/bin/
       - run: npm publish --provenance --access public ./npm

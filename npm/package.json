@@ -1,7 +1,7 @@
 {
   "name": "katanakit-sysli",
-  "version": "0.1.0",
-  "description": "ksys — lazysystemd: todo el ecosistema systemd (units, timers, journal, boot, network, sessions, devices) en una TUI. Requiere Linux + systemd.",
+  "version": "0.2.0",
+  "description": "ksys — lazysystemd: the whole systemd ecosystem (units, timers, journal, boot, network, sessions, devices) in one TUI. Requires Linux + systemd.",
   "license": "MIT",
   "type": "commonjs",
   "bin": {
@@ -10,10 +10,10 @@
   "os": [
     "linux"
   ],
-  "optionalDependencies": {
-    "@senseikatana/ksys-linux-x64": "0.1.0",
-    "@senseikatana/ksys-linux-arm64": "0.1.0"
-  },
+  "files": [
+    "bin/",
+    "README.md"
+  ],
   "scripts": {
     "check": "node --check ./bin/ksys.js && echo OK"
   },

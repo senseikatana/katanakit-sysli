@@ -1,24 +1,23 @@
 #!/usr/bin/env node
-// ksys — shim del wrapper npm `katanakit-sysli`.
+// ksys — single-package launcher for `katanakit-sysli`.
 //
-// Que hace (en orden):
-//   1. Verifica que corre en Linux (ksys habla con systemd por D-Bus).
-//   2. Elige el paquete de plataforma segun process.arch.
-//   3. Ejecuta el binario Rust con los mismos argumentos (stdio heredado,
-//      o sea la TUI recibe tu terminal tal cual).
+// Both prebuilt binaries ship inside this package:
+//   bin/ksys-x64    Linux x86_64 (gnu)
+//   bin/ksys-arm64  Linux arm64 (gnu)
+// No postinstall downloads, no extra packages. The shim picks by arch and
+// execs the Rust binary with your args and an inherited terminal.
 //
-// En desarrollo (este repo) usa target/release o target/debug si no hay
-// paquete de plataforma instalado. En produccion (npm i -g) el binario
-// viene de @senseikatana/ksys-linux-x64 | -arm64 via optionalDependencies.
+// Local dev fallback: ../../target/release/ksys (or debug) when the
+// bundled binary for your arch is missing.
 "use strict";
 
 const { existsSync } = require("node:fs");
 const { spawnSync } = require("node:child_process");
 const path = require("node:path");
 
-const ARCH_TO_PKG = {
-  x64: "@senseikatana/ksys-linux-x64",
-  arm64: "@senseikatana/ksys-linux-arm64",
+const ARCH_TO_BIN = {
+  x64: "ksys-x64",
+  arm64: "ksys-arm64",
 };
 
 function fail(msg) {
@@ -26,34 +25,27 @@ function fail(msg) {
   process.exit(1);
 }
 
-// 1. Solo Linux: systemd no existe en macOS/Windows.
+// 1. Linux only: ksys talks to systemd over D-Bus.
 if (process.platform !== "linux") {
   fail(
-    `requiere Linux + systemd (estás en ${process.platform}). ` +
-      `Si quieres compilar desde fuente en Linux: cargo install --path .`
+    `requires Linux + systemd (you are on ${process.platform}). ` +
+      `To build from source on Linux: cargo install --path .`
   );
 }
 
-// 2. Arquitectura soportada.
-const pkgName = ARCH_TO_PKG[process.arch];
-if (!pkgName) {
+// 2. Supported arch.
+const file = ARCH_TO_BIN[process.arch];
+if (!file) {
   fail(
-    `arquitectura no soportada: ${process.arch}. ` +
-      `Soportadas: ${Object.keys(ARCH_TO_PKG).join(", ")}. ` +
-      `Alternativa: compila con cargo build --release.`
+    `unsupported architecture: ${process.arch}. ` +
+      `Supported: ${Object.keys(ARCH_TO_BIN).join(", ")}. ` +
+      `Alternative: cargo build --release.`
   );
 }
 
-// 3a. Producción: binario del paquete de plataforma.
-let binary = null;
-try {
-  binary = require.resolve(`${pkgName}/bin/ksys`);
-} catch {
-  binary = null;
-}
-
-// 3b. Desarrollo: fallback al build local de cargo (para probar sin publicar).
-if (!binary || !existsSync(binary)) {
+// 3. Bundled binary, then local cargo build (dev).
+let binary = path.join(__dirname, file);
+if (!existsSync(binary)) {
   const candidates = [
     path.join(__dirname, "..", "..", "target", "release", "ksys"),
     path.join(__dirname, "..", "..", "target", "debug", "ksys"),
@@ -63,27 +55,27 @@ if (!binary || !existsSync(binary)) {
 
 if (!binary) {
   fail(
-    `no se encontró el binario.\n` +
-      `  - Instalado por npm: reinstala con npm i -g katanakit-sysli\n` +
-      `  - En este repo: corre primero cargo build --release`
+    `binary not found.\n` +
+      `  - Installed via npm: reinstall with npm i -g katanakit-sysli\n` +
+      `  - In this repo: run cargo build --release first`
   );
 }
 
-// 4. Aviso rápido si PID 1 no es systemd (containers sin systemd, WSL1...).
-//    No bloquea: el TUI tiene fallback a systemctl, pero avisamos.
+// 4. Heads-up when PID 1 is not systemd (containers without systemd...).
+//    Non-blocking: the TUI falls back to systemctl, but we warn.
 try {
   const fs = require("node:fs");
   const comm = fs.readFileSync("/proc/1/comm", "utf8").trim();
   if (comm !== "systemd" && !process.env.KSYS_ALLOW_NO_SYSTEMD) {
     console.error(
-      `ksys: aviso — PID 1 es "${comm}", no systemd. ` +
-        `Algunas vistas usarán fallback limitado.`
+      `ksys: warning — PID 1 is "${comm}", not systemd. ` +
+        `Some views will use a limited fallback.`
     );
   }
 } catch {
-  // Sin /proc (raro): seguimos, el binario decide.
+  // No /proc (rare): carry on, the binary decides.
 }
 
-// 5. Exec con los mismos args y terminal heredada.
+// 5. Exec with the same args and an inherited terminal.
 const res = spawnSync(binary, process.argv.slice(2), { stdio: "inherit" });
 process.exit(res.status ?? 1);

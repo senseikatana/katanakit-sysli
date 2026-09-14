@@ -1,8 +1,5 @@
-# `@senseikatana/ksys-linux-arm64`
+# `@senseikatana/ksys-linux-arm64` — DEPRECATED
 
-Solo el binario `ksys` compilado para Linux arm64 (gnu).
-
-- **No lo instales directo**: instala `katanakit-sysli`, que elige este
-  paquete solo vía `optionalDependencies`.
-- `bin/ksys` **no se commitea** (ver `.gitignore`): lo pone el CI con
-  `cargo build --release --target aarch64-unknown-linux-gnu`.
+> Since `katanakit-sysli@0.2.0` both binaries ship inside the single
+> `katanakit-sysli` package. Install that instead: `npm i -g katanakit-sysli`.
+> This package is frozen at 0.1.0 and unpublished when possible.
