@@ -1,7 +1,5 @@
 # CHANGELOG — katanakit-sysli
 
-## [Unreleased]
-
 ## [0.2.0] — 2026-09-14 — control total systemd + CLI + paquete npm único
 
 Paquete único npm 0.2.0 (consolidación + docs + Docker):
@@ -40,3 +38,41 @@ Control systemd + CLI (scope + mask + perfiles):
 - [x] Lectura por D-Bus `ListUnits` con fallback `systemctl`
 - [x] Wrapper npm `katanakit-sysli` + paquetes `@senseikatana/ksys-linux-*`
 - [x] Workflow `npm-platform.yml` (build matrix + publish con provenance)
+
+## [0.0.1] - 2026-11-14
+
+Highlights: fix: subcarpetas como archivos normales, plus 1 more change.
+
+- 📝 docs(.atl): update 2 files (+17/-19) `bd375a1`
+  - `.atl/.skill-registry.cache.json`
+  - `.atl/skill-registry.md`
+- 🐛 fix: subcarpetas como archivos normales `af082cc`
+  - `.atl/.skill-registry.cache.json`
+  - `.atl/skill-registry.md`
+  - `.github/workflows/npm-platform.yml`
+  - `.gitignore`
+  - `AGENTS.md`
+  - `Cargo.lock`
+  - `Cargo.toml`
+  - `LICENSE`
+  - `README.md`
+  - `docker/test-install.sh`
+  - `docker/test-install/Dockerfile`
+  - `docker/test-systemd.sh`
+  - `docker/test-systemd/Dockerfile`
+  - `npm-linux-arm64/README.md`
+  - `npm-linux-arm64/package.json`
+  - `npm-linux-x64/README.md`
+  - `npm-linux-x64/package.json`
+  - `npm/README.md`
+  - `npm/bin/ksys.js`
+  - `npm/package.json`
+  - `scripts/dev/sys-menu.sh`
+  - `scripts/sync-version.cjs`
+  - `src/app.rs`
+  - `src/journal.rs`
+  - `src/main.rs`
+  - `src/profiles.rs`
+  - `src/systemd.rs`
+  - `src/ui.rs`
+
